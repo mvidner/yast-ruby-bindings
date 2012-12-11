@@ -98,7 +98,9 @@ module Kernel
       begin
         YCP::add_ycp_module(ycpns.upcase)
       rescue RuntimeError => e
-        YCP::add_ycp_module(ycpns.capitalize)
+        #inspired by activeSupport::Camelize
+        camelcase_ycpns = ycpns.capitalize.gsub(/_(.)/){ $1.upcase }
+        YCP::add_ycp_module(camelcase_ycpns)
       end
       return true
     end

@@ -28,6 +28,13 @@ module Yast
         stdout_stderr = `ruby -e "#{script}" 2>&1`
         expect(stdout_stderr).to eq ""
       end
+
+      it "reports bad arguments properly" do
+        # "any (string, list)" is YCP type syntax, but better than
+        # the former "<*ERR*>" message
+        expect {WFM.CallFunction("test_client", "an argument")}.
+          to raise_error(/CallFunction : any (string, list)/)
+      end
     end
   end
 end

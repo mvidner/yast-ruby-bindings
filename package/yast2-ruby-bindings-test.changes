@@ -2,4 +2,6 @@
 Tue Sep 29 08:02:35 UTC 2015 - mvidner@suse.com
 
 - Split off yast2-ruby-bindings-test.spec to reduce BuildRequires.
+- Regression test for the fix of bnc#943757 implemented
+  in libyui-ncurses 2.47.3
 

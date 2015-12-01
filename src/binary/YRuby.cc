@@ -48,7 +48,7 @@ as published by the Free Software Foundation; either version
 
 void set_last_exception(VALUE& module,const string& message)
 {
-  rb_ivar_set(module,rb_intern("@__last_exception"),rb_utf8_str_new(message));
+  rb_ivar_set(module,rb_intern("@__last_exception"), yrb_utf8_str_new(message));
 }
 
 YRuby * YRuby::_yRuby = 0;
@@ -189,13 +189,22 @@ YCPValue YRuby::callInner (string module_name, string function,
     // get the
     YCPValue v = argList->value(i);
     y2debug("Adding argument %d of type %s", i, v->valuetype_str());
-    values[i+3] = ycpvalue_2_rbvalue(v);
+    VALUE vr = ycpvalue_2_rbvalue(v);
+    values[i+3] = vr;
+    // register parameters to avoid its garbage collecting during creation of
+    // other non trivial types. RB_GC_GUARD is not enough. (bnc#945299)
+    rb_gc_register_address(values + i + 3);
   }
 
   y2debug( "Will call function '%s' in module '%s' with '%d' arguments", function.c_str(), module_name.c_str(), size-1);
 
   int error;
   VALUE result = rb_protect(protected_call, (VALUE)values, &error);
+  for (int i = 0 ; i < size; ++i )
+  {
+    rb_gc_unregister_address(values + i + 3);
+  }
+
   if (error)
   {
     VALUE exception = rb_gv_get("$!"); /* get last exception */
@@ -224,7 +233,12 @@ YCPValue YRuby::callClient(const string& path)
     return YCPBoolean(false);
 
   VALUE wfm_module = y2ruby_nested_const_get("Yast::WFM");
-  VALUE result = rb_funcall(wfm_module, rb_intern("run_client"), 1, rb_str_new2(path.c_str()));
+  VALUE client_path = rb_str_new2(path.c_str());
+  // register parameters to avoid its garbage collecting during creation of
+  // other non trivial types. RB_GC_GUARD is not enough. (bnc#945299)
+  rb_gc_register_address(&client_path);
+  VALUE result = rb_funcall(wfm_module, rb_intern("run_client"), 1, client_path);
+  rb_gc_unregister_address(&client_path);
   return rbvalue_2_ycpvalue(result);
 }
 

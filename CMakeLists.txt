@@ -10,8 +10,8 @@ endif()
 
 project(yast2-ruby-bindings)
 set(PACKAGE "yast2-ruby-bindings")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -Wall -Woverloaded-virtual")
-set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -g -O3 -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x -g -O3 -Wall -Woverloaded-virtual")
+set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -std=gnu++0x -g -O3 -Wall")
 
 #
 # Where is YaST ?
@@ -34,6 +34,13 @@ find_package(Ruby REQUIRED)
 if(NOT RUBY_EXECUTABLE)
   message(FATAL_ERROR "Ruby not found.")
 endif()
+
+#
+# crypt.h or xcrypt.h ?
+#
+INCLUDE(CheckIncludeFiles)
+CHECK_INCLUDE_FILES(xcrypt.h HAVE_XCRYPT_H)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
 #
 # -> src/

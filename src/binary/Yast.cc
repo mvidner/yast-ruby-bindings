@@ -32,6 +32,7 @@ as published by the Free Software Foundation; either version
 #include <ycp/y2log.h>
 #include <ycp/YExpression.h>
 #include <ycp/YCPValue.h>
+#include <ycp/YCPVoid.h>
 #include <ycp/YCPCode.h>
 #include <ycp/YCPByteblock.h>
 #include <ycp/Import.h>
@@ -99,7 +100,7 @@ import_namespace( const char *name)
  * Tries to import a YCP namespace
  *
  * call-seq:
- *   YCP::import("name")
+ *   Yast.import("name")
  *
  */
 
@@ -118,7 +119,7 @@ ycp_find_include_file( VALUE self, VALUE path)
   if (include_path.empty())
     rb_raise(rb_eRuntimeError, "Cannot find client %s", ipath.c_str());
 
-  return rb_utf8_str_new(include_path);
+  return yrb_utf8_str_new(include_path);
 }
 /*
  * ycp_module_each_symbol(namespace) -> iterator
@@ -148,7 +149,7 @@ ycp_module_symbols(VALUE self, VALUE namespace_name)
   for (unsigned int i=0; i < ns->symbolCount(); ++i)
   {
     SymbolEntryPtr s = ns->symbolEntry(i);
-    VALUE name = rb_utf8_str_new(s->name());
+    VALUE name = yrb_utf8_str_new(s->name());
     VALUE type = ID2SYM(rb_intern(s->catString().c_str()));
     rb_hash_aset(res,name,type);
   }
@@ -256,7 +257,9 @@ ycp_module_call_ycp_function(int argc, VALUE *argv, VALUE self)
     for (std::map<int,SymbolEntryPtr>::iterator i = refs.begin(); i != refs.end(); ++i)
     {
       //set back reference
-      rb_funcall(argv[i->first], rb_intern("value="), 1, ycpvalue_2_rbvalue(i->second->value()));
+      VALUE val = ycpvalue_2_rbvalue(i->second->value());
+      RB_GC_GUARD(val);
+      rb_funcall(argv[i->first], rb_intern("value="), 1, val);
     }
     return ycpvalue_2_rbvalue(res);
   }
@@ -329,7 +332,7 @@ y2dir_paths( VALUE self )
   VALUE result = rb_ary_new2(size);
   for (int i = 0; i < size; ++i)
   {
-    rb_ary_push(result, rb_utf8_str_new(Y2PathSearch::searchPath(Y2PathSearch::GENERIC,i)));
+    rb_ary_push(result, yrb_utf8_str_new(Y2PathSearch::searchPath(Y2PathSearch::GENERIC,i)));
   }
   return result;
 }
@@ -340,7 +343,7 @@ static VALUE byteblock_to_s(VALUE self)
   Data_Get_Struct(self, YCPByteblock, bb);
 
   if (bb)
-    return rb_utf8_str_new((*bb)->toString());
+    return yrb_utf8_str_new((*bb)->toString());
   else
     rb_raise(rb_eRuntimeError, "Byteblock is empty");
 
@@ -382,6 +385,97 @@ static VALUE code_call( int argc, VALUE *argv, VALUE self )
     rb_raise(rb_eRuntimeError, "YCode is empty");
 }
 
+/*
+ * Document-method: ui_component
+ *
+ * YaST component serving the UI: "gtk", "ncurses", "qt",
+ * or the dummy one "UI"
+ */
+static VALUE ui_get_component()
+{
+  string s;
+  YUIComponent *c = YUIComponent::uiComponent();
+  if (c)
+  {
+    s = c->requestedUIName();
+  }
+  return yrb_utf8_str_new(s);
+}
+
+/*
+ * Document-method: ui_component=
+ *
+ * When Ruby is embedded in YaST (y2base is the main program), the UI
+ * is determined by the time Ruby code gets run. If ruby is the main program,
+ * we need to load the UI frontend if we need one.
+ *
+ * Assign "ncurses" or "qt" before UI calls.
+ *
+ *    #! /usr/bin/env ruby
+ *    require "yast"
+ *    include Yast
+ *    include Yast::UIShortcuts
+ *
+ *    if Yast.ui_component == ""
+ *      Yast.ui_component = ARGV[0] || "ncurses"
+ *    end
+ *
+ *    Builtins.y2milestone("UI component: %1", Yast.ui_component)
+ *    Yast.import "UI"
+ *
+ *    UI.OpenDialog(PushButton("This is a button"))
+ *    UI.UserInput
+ *    UI.CloseDialog
+ */
+static VALUE ui_set_component(VALUE self, VALUE name)
+{
+  YUIComponent *c = YUIComponent::uiComponent();
+  if (c)
+  {
+    YUIComponent::setUseDummyUI(false);
+
+    string s = StringValuePtr(name);
+    c->setRequestedUIName(s);
+  }
+
+  return Qnil;
+}
+
+static void init_ui()
+{
+  const char *ui_name = "UI";
+
+  Y2Component *c = YUIComponent::uiComponent();
+  if (c == 0)
+  {
+    y2debug ("UI component not created yet, creating %s", ui_name);
+
+    c = Y2ComponentBroker::createServer(ui_name); // just dummy ui if none is defined
+    if (c == 0)
+    {
+      y2error("can't create UI component");
+      return;
+    }
+
+    c->setServerOptions(0, NULL);
+  }
+  else
+  {
+    y2debug("UI component already present: %s", c->name ().c_str ());
+  }
+}
+
+static VALUE ui_finalizer()
+{
+  YUIComponent *c = YUIComponent::uiComponent();
+  if (c)
+  {
+    // Shut down the component.
+    c->result(YCPVoid());
+  }
+  return Qnil;
+}
+
 } //extern C
 
 extern "C"
@@ -396,6 +490,7 @@ extern "C"
   Init_yastx()
   {
     YCPPathSearch::initialize();
+    init_ui();
 
     /*
      * module YCP
@@ -413,6 +508,11 @@ extern "C"
 
     rb_define_method( rb_mYast, "y2_logger", RUBY_METHOD_FUNC(yast_y2_logger), -1);
     rb_define_singleton_method( rb_mYast, "y2_logger", RUBY_METHOD_FUNC(yast_y2_logger), -1);
+
+    // UI initialization
+    rb_define_singleton_method( rb_mYast, "ui_component",  RUBY_METHOD_FUNC(ui_get_component), 0);
+    rb_define_singleton_method( rb_mYast, "ui_component=", RUBY_METHOD_FUNC(ui_set_component), 1);
+    rb_define_singleton_method( rb_mYast, "ui_finalizer",     RUBY_METHOD_FUNC(ui_finalizer), 0);
 
     // Y2 references
     rb_cYReference = rb_define_class_under(rb_mYast, "YReference", rb_cObject);

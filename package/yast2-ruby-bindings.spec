@@ -17,7 +17,7 @@
 
 
 Name:           yast2-ruby-bindings
-Version:        3.1.22
+Version:        3.1.40
 Url:            https://github.com/yast/yast-ruby-bindings
 Release:        0
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -28,21 +28,25 @@ BuildRequires:  cmake
 BuildRequires:  gcc-c++
 BuildRequires:  yast2-core-devel
 BuildRequires:  yast2-devtools >= 3.1.10
-# libzypp-devel is missing .la requires
-BuildRequires:  ruby-devel
-%if 0%{?suse_version} == 1315
-BuildRequires:  rubygem(%{rb_default_ruby_abi}:fast_gettext)
-BuildRequires:  rubygem(%{rb_default_ruby_abi}:rspec)
-Requires:       rubygem(%{rb_default_ruby_abi}:fast_gettext)
-%else
+%if 0%{suse_version} == 1310
 BuildRequires:  rubygem-fast_gettext
 BuildRequires:  rubygem-rspec
 Requires:       rubygem-fast_gettext
+%else
+BuildRequires:  rubygem(%{rb_default_ruby_abi}:fast_gettext)
+BuildRequires:  rubygem(%{rb_default_ruby_abi}:rspec)
+Requires:       rubygem(%{rb_default_ruby_abi}:fast_gettext)
 %endif
+BuildRequires:  ruby-devel
 Requires:       yast2-core >= 2.24.0
 BuildRequires:  yast2-core-devel >= 2.24.0
 Requires:       yast2-ycp-ui-bindings       >= 2.21.9
 BuildRequires:  yast2-ycp-ui-bindings-devel >= 2.21.9
+# The test suite includes a regression test (std_streams_spec.rb) for a
+# libyui-ncurses bug fixed in 2.47.3
+BuildRequires:  libyui-ncurses >= 2.47.3
+# The mentioned test requires screen in order to be executed in headless systems
+BuildRequires:  screen
 Requires:       ruby
 Summary:        Ruby bindings for the YaST platform
 License:        GPL-2.0
@@ -69,10 +73,10 @@ make %{?jobs:-j %jobs} VERBOSE=1
 %install
 cd build
 make install DESTDIR=$RPM_BUILD_ROOT
-cd ..
+cd -
 
 %check
-cd build/tests/ruby
+cd build
 make test ARGS=-V
 cd -
 
